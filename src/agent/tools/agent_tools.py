@@ -1,4 +1,4 @@
-from rag.rag_service import RagSummarizeService
+from src.rag.rag_service import RagSummarizeService
 from langchain_core.tools import tool
 
 rag = RagSummarizeService()

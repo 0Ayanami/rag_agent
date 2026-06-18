@@ -1,7 +1,7 @@
 from .tools.agent_tools import tools
-from model.factory import chat_model
+from src.model.factory import chat_model
 from langchain.agents import create_agent
-from utils.prompt_loader import load_system_prompt
+from src.utils.prompt_loader import load_system_prompt
 from .tools.middleware import middlewares
 
 class ReactAgent:

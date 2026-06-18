@@ -3,7 +3,7 @@ from typing import Optional
 from langchain_core.embeddings import Embeddings
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_ollama import OllamaEmbeddings, ChatOllama
-from utils.config_handler import rag_conf
+from src.utils.config_handler import rag_conf
 from langchain_community.embeddings import DashScopeEmbeddings
 from langchain_community.chat_models.tongyi import ChatTongyi
 """

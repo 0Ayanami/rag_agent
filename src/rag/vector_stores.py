@@ -1,11 +1,11 @@
 from langchain_chroma import Chroma
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from utils.config_handler import chroma_conf
-from model.factory import embed_model
+from src.utils.config_handler import chroma_conf
+from src.model.factory import embed_model
 import os
-from utils.path_tool import get_abs_path
-from utils.file_handler import pdf_loader, txt_loader, listdir_with_allowed_type, get_file_md5_hex
-from utils.logger_handler import logger
+from src.utils.path_tool import get_abs_path
+from src.utils.file_handler import pdf_loader, txt_loader, listdir_with_allowed_type, get_file_md5_hex
+from src.utils.logger_handler import logger
 
 """
 向量库服务类：提供向量库的存储、检索、文本分割...

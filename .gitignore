@@ -4,8 +4,10 @@
 /data
 /chroma_db
 /chat_history
-/demo
+/tests
 /log
+/configs
+/.venv
 
 /__pycache__
 /model/__pycache__

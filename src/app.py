@@ -1,7 +1,7 @@
 import time
 
 import streamlit as st
-from agent.react_agent import ReactAgent
+from src.agent.react_agent import ReactAgent
 
 # 标题
 st.title("React Agent Demo")
