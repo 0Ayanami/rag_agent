@@ -1,4 +1,3 @@
 chat_model_name: qwen3:4b
 embedding_model_name: qwen3-embedding:0.6b
 
-# mem0_api_key: m0-HjGIJpMk6uFJPXpgcds100YiwMUktDEn8LkLOQUA

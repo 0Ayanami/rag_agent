@@ -8,6 +8,7 @@
 /log
 /configs
 /.venv
+md5.txt
 
 /__pycache__
 /model/__pycache__
