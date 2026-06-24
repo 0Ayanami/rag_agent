@@ -1,12 +1,10 @@
 /.vscode
-/projects
-/.env
+/.env.example
 /data
 /chroma_db
 /chat_history
 /tests
 /log
-/configs
 /.venv
 md5.txt
 
@@ -16,3 +14,5 @@ md5.txt
 /rag/__pycache__
 /agent/__pycache__
 /agent/tools/__pycache__
+**/__pycache__/
+*.py[cod]

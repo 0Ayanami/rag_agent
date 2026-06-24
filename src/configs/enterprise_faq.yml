@@ -1,0 +1,41 @@
+entries:
+  - id: account_unlock
+    category: 账号与权限
+    question: 账号被锁定后如何处理？
+    answer: 请先确认是否连续输错密码。普通账号可通过统一身份认证页面自助解锁；涉及管理员或敏感系统权限时，应由本部门负责人审批后提交信息化服务台处理。
+    keywords: [账号, 锁定, 解锁, 密码, 登录]
+  - id: permission_request
+    category: 账号与权限
+    question: 如何申请业务系统权限？
+    answer: 申请人应说明系统名称、所需角色、业务用途和使用期限，经直属负责人及系统责任部门审批后，由系统管理员按最小权限原则开通。
+    keywords: [权限, 申请, 系统, 角色, 开通]
+  - id: seal_process
+    category: 行政办公
+    question: 公章使用如何申请？
+    answer: 用印前需提交用印事项、文件正文、份数和使用时间。经事项归口部门及授权审批人批准后，由印章管理员现场核验并登记。
+    keywords: [公章, 用印, 印章, 审批, 盖章]
+  - id: procurement_process
+    category: 采购管理
+    question: 采购需求如何发起？
+    answer: 需求部门应提交采购说明、预算来源、技术或服务要求和交付时间。达到集中采购或招标标准的事项，应转采购管理部门按制度组织实施。
+    keywords: [采购, 招标, 预算, 供应商, 需求]
+  - id: expense_reimbursement
+    category: 财务报销
+    question: 费用报销需要哪些材料？
+    answer: 通常需要合规票据、费用说明、审批记录及必要的合同或验收材料。具体口径以本单位财务制度和当期通知为准。
+    keywords: [报销, 发票, 费用, 财务, 票据]
+  - id: data_export
+    category: 数据安全
+    question: 业务数据可以导出或对外提供吗？
+    answer: 数据导出应遵循最小必要原则。涉及敏感、重要或个人信息的数据，必须完成用途说明、数据分级确认和授权审批；对外提供前还应进行脱敏及合规审查。
+    keywords: [数据, 导出, 对外, 脱敏, 敏感, 个人信息]
+  - id: incident_report
+    category: 信息安全
+    question: 发现疑似安全事件怎么办？
+    answer: 应立即停止可疑操作并保留现场，不要自行删除日志或传播样本；随后通过单位指定渠道联系信息安全团队，并说明时间、系统、现象和已采取措施。
+    keywords: [安全事件, 病毒, 攻击, 泄露, 日志, 应急]
+  - id: service_contact
+    category: 服务支持
+    question: 无法确认归口部门时怎么办？
+    answer: 可先提交服务工单，描述事项背景、期望结果、紧急程度和联系方式，由综合服务台分派至责任部门。
+    keywords: [服务台, 工单, 部门, 联系, 支持, 咨询]

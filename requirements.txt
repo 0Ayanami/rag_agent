@@ -1,0 +1,6 @@
+openai-agents==0.17.7
+openai==2.43.0
+python-dotenv==1.2.2
+PyYAML==6.0.3
+streamlit==1.58.0
+httpx==0.28.1

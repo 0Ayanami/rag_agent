@@ -1,0 +1,15 @@
+name: 政企问答助手
+
+max_turns: 5
+parallel_tool_calls: false
+tracing_disabled: true
+
+session_enabled: true
+session_db_path: chat_history/agent_sessions.db
+default_tenant_id: default
+default_user_id: anonymous
+
+skill_root: src/skills
+enabled_skills:
+  - enterprise_qa
+  - service_request
