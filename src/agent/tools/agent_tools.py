@@ -6,6 +6,7 @@ from typing import Literal
 from agents import RunContextWrapper, function_tool
 
 from src.agent.context import AgentContext
+from src.rag.vector_store import RagDependencyError
 from src.utils.config_handler import enterprise_faq_conf
 
 
@@ -114,8 +115,39 @@ def draft_service_request(
     )
 
 
+@function_tool(
+    description_override=(
+        "查询 ChromaDB 知识向量库。适用于需要从已入库文档、报告、制度材料"
+        "或知识库片段中检索依据的问答。"
+    ),
+    is_enabled=tool_enabled("search_knowledge_base"),
+)
+def search_knowledge_base(query: str, top_k: int = 4) -> str:
+    try:
+        from src.rag.service import get_rag_service
+
+        return get_rag_service().search_as_json(query, top_k=top_k)
+    except RagDependencyError as exc:
+        return json.dumps(
+            {
+                "matches": [],
+                "error": str(exc),
+            },
+            ensure_ascii=False,
+        )
+    except Exception as exc:
+        return json.dumps(
+            {
+                "matches": [],
+                "error": f"知识库查询失败：{exc}",
+            },
+            ensure_ascii=False,
+        )
+
+
 tools = [
     search_enterprise_faq,
     get_request_identity,
     draft_service_request,
+    search_knowledge_base,
 ]

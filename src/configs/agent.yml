@@ -12,4 +12,5 @@ default_user_id: anonymous
 skill_root: src/skills
 enabled_skills:
   - enterprise_qa
+  - knowledge_rag
   - service_request

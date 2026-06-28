@@ -1,10 +1,11 @@
 import logging
-from .path_tool import get_abs_path
 import os
 from datetime import datetime
 
+from .path_tool import resolve_project_path
+
 # 日志保存的根目录
-LOG_ROOT = get_abs_path("log")
+LOG_ROOT = resolve_project_path("log")
 
 os.makedirs(LOG_ROOT, exist_ok=True)
 

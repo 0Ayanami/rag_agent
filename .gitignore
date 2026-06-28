@@ -1,12 +1,14 @@
 /.vscode
-/.env.example
+.agents
+.env
+.env.example
 /data
 /chroma_db
 /chat_history
 /tests
-/log
 /.venv
 md5.txt
+/src/log
 
 /__pycache__
 /model/__pycache__

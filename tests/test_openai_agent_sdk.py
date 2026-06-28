@@ -21,6 +21,7 @@ from src.agent.openai_agent import (
 from src.agent.tools.agent_tools import (
     draft_service_request,
     get_request_identity,
+    search_knowledge_base,
     search_enterprise_faq,
     tools,
 )
@@ -30,6 +31,10 @@ from src.model.agent_model import (
     ModelConfigurationError,
     create_agent_model,
 )
+from src.rag.config import RagConfig
+from src.rag.embedding import EmbeddingConfig, OpenAICompatibleEmbeddingClient
+from src.rag.service import RagService
+from src.rag.vector_store import RagSearchResult
 from src.skills import SkillRegistry, SkillValidationError
 from src.utils.prompt_loader import load_system_prompt
 
@@ -127,7 +132,7 @@ def create_mock_openai_model() -> OpenAIChatCompletionsModel:
 
 
 class OpenAIAgentSdkTests(unittest.IsolatedAsyncioTestCase):
-    def test_agent_startup_does_not_import_paused_rag_stacks(self):
+    def test_agent_startup_does_not_import_heavy_rag_stacks(self):
         forbidden = [
             name
             for name in sys.modules
@@ -206,11 +211,123 @@ class OpenAIAgentSdkTests(unittest.IsolatedAsyncioTestCase):
             patch.dict("os.environ", {}, clear=True),
             patch("src.model.agent_model.load_dotenv"),
         ):
-            with self.assertRaisesRegex(
-                ModelConfigurationError,
-                "MODEL_NAME",
-            ):
+            with self.assertRaises(ModelConfigurationError) as exc:
                 ModelConfig.from_env()
+
+        message = str(exc.exception)
+        self.assertIn("MODEL_NAME/LM_MODEL", message)
+        self.assertIn("MODEL_BASE_URL/BASE_URL", message)
+        self.assertIn("MODEL_API_KEY/API_KEY", message)
+
+    def test_embedding_config_supports_local_ollama_without_key(self):
+        with (
+            patch.dict(
+                "os.environ",
+                {
+                    "EMBEDDING_MODEL": "nomic-embed-text",
+                    "EMBEDDING_BASE_URL": "http://localhost:11434/v1",
+                    "EMBEDDING_API_KEY": "",
+                },
+                clear=False,
+            ),
+            patch("src.rag.embedding.load_dotenv"),
+        ):
+            config = EmbeddingConfig.from_env()
+
+        self.assertEqual(config.model_name, "nomic-embed-text")
+        self.assertEqual(config.base_url, "http://localhost:11434/v1")
+        self.assertEqual(config.api_key, "ollama")
+
+    def test_embedding_client_falls_back_to_ollama_native_embed(self):
+        config = EmbeddingConfig(
+            model_name="qwen3-embedding:0.6b",
+            base_url="http://localhost:11434/v1",
+            api_key="ollama",
+        )
+        client = OpenAICompatibleEmbeddingClient(config)
+
+        class BrokenEmbeddings:
+            def create(self, **_kwargs):
+                raise RuntimeError("openai-compatible failed")
+
+        class FakeOpenAIClient:
+            embeddings = BrokenEmbeddings()
+
+        def fake_post(url, json, timeout):
+            self.assertEqual(url, "http://localhost:11434/api/embed")
+            self.assertEqual(json["model"], "qwen3-embedding:0.6b")
+            self.assertEqual(json["input"], ["采购审批"])
+            self.assertEqual(timeout, 120)
+            return httpx.Response(
+                200,
+                json={"embeddings": [[0.1, 0.2, 0.3]]},
+                request=httpx.Request("POST", url),
+            )
+
+        client.client = FakeOpenAIClient()
+        with patch("src.rag.embedding.httpx.post", side_effect=fake_post):
+            embeddings = client.embed_texts(["采购审批"])
+
+        self.assertEqual(embeddings, [[0.1, 0.2, 0.3]])
+
+    def test_rag_service_indexes_and_queries_with_injected_clients(self):
+        class FakeEmbeddingClient:
+            def __init__(self):
+                self.inputs = []
+
+            def embed_texts(self, texts):
+                self.inputs.extend(texts)
+                return [[float(len(text)), 1.0] for text in texts]
+
+        class FakeVectorStore:
+            def __init__(self):
+                self.upserts = []
+
+            def upsert_chunks(self, chunks, embeddings):
+                self.upserts.append((chunks, embeddings))
+
+            def query(self, query_embedding, *, top_k):
+                return [
+                    RagSearchResult(
+                        text="采购应先提交申请。",
+                        source="policy.md",
+                        source_name="policy.md",
+                        chunk_index=0,
+                        distance=0.12,
+                    )
+                ]
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source_path = Path(temp_dir) / "policy.md"
+            source_path.write_text(
+                "采购审批流程：先提交申请，再由部门负责人审批。",
+                encoding="utf-8",
+            )
+            config = RagConfig(
+                persist_dir=Path(temp_dir) / "chroma",
+                collection_name="test_collection",
+                source_paths=(Path(temp_dir),),
+                chunk_size=20,
+                chunk_overlap=5,
+                top_k=2,
+                embedding_batch_size=2,
+            )
+            embedding_client = FakeEmbeddingClient()
+            vector_store = FakeVectorStore()
+            service = RagService(
+                config=config,
+                embedding_client=embedding_client,
+                vector_store=vector_store,
+            )
+
+            summary = service.index_sources()
+            payload = json.loads(service.search_as_json("采购流程"))
+
+        self.assertEqual(summary.source_count, 1)
+        self.assertGreaterEqual(summary.chunk_count, 1)
+        self.assertTrue(vector_store.upserts)
+        self.assertIn("采购流程", embedding_client.inputs)
+        self.assertEqual(payload["matches"][0]["source_name"], "policy.md")
 
     def test_tools_are_agents_sdk_function_tools(self):
         self.assertEqual(
@@ -219,10 +336,12 @@ class OpenAIAgentSdkTests(unittest.IsolatedAsyncioTestCase):
                 "search_enterprise_faq",
                 "get_request_identity",
                 "draft_service_request",
+                "search_knowledge_base",
             ],
         )
         self.assertIn("question", tools[0].params_json_schema["properties"])
         self.assertNotIn("context", tools[1].params_json_schema["properties"])
+        self.assertIn("query", tools[3].params_json_schema["properties"])
 
     async def test_enterprise_faq_matches_account_question(self):
         result = await search_enterprise_faq.on_invoke_tool(
@@ -274,6 +393,40 @@ class OpenAIAgentSdkTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(draft["tenant_id"], "tenant-a")
         self.assertIn("尚未提交", draft["notice"])
 
+    async def test_knowledge_base_tool_returns_rag_matches(self):
+        class FakeRagService:
+            def search_as_json(self, query, top_k=None):
+                return json.dumps(
+                    {
+                        "matches": [
+                            {
+                                "text": f"{query}-answer",
+                                "source_name": "policy.md",
+                                "chunk_index": 0,
+                            }
+                        ],
+                        "top_k": top_k,
+                    },
+                    ensure_ascii=False,
+                )
+
+        arguments = json.dumps(
+            {"query": "采购审批流程", "top_k": 2},
+            ensure_ascii=False,
+        )
+        with patch(
+            "src.rag.service.get_rag_service",
+            return_value=FakeRagService(),
+        ):
+            result = await search_knowledge_base.on_invoke_tool(
+                create_tool_context("search_knowledge_base", arguments),
+                arguments,
+            )
+
+        payload = json.loads(result)
+        self.assertEqual(payload["matches"][0]["source_name"], "policy.md")
+        self.assertEqual(payload["top_k"], 2)
+
     def test_default_instructions(self):
         context = SimpleNamespace(context=AgentContext())
         self.assertEqual(dynamic_instructions(context, None), load_system_prompt())
@@ -282,7 +435,7 @@ class OpenAIAgentSdkTests(unittest.IsolatedAsyncioTestCase):
         registry = SkillRegistry.from_directory("src/skills")
         self.assertEqual(
             registry.names(),
-            ("enterprise_qa", "service_request"),
+            ("enterprise_qa", "knowledge_rag", "service_request"),
         )
         skills = registry.resolve(
             ["enterprise_qa"],
@@ -291,6 +444,13 @@ class OpenAIAgentSdkTests(unittest.IsolatedAsyncioTestCase):
         prompt = registry.build_prompt(skills)
         self.assertIn("enterprise_qa", prompt)
         self.assertIn("search_enterprise_faq", prompt)
+        rag_skills = registry.resolve(
+            ["knowledge_rag"],
+            available_tool_names=[tool.name for tool in tools],
+        )
+        rag_prompt = registry.build_prompt(rag_skills)
+        self.assertIn("knowledge_rag", rag_prompt)
+        self.assertIn("search_knowledge_base", rag_prompt)
 
     def test_skill_registry_rejects_unknown_or_missing_tool(self):
         registry = SkillRegistry.from_directory("src/skills")
@@ -343,6 +503,28 @@ class OpenAIAgentSdkTests(unittest.IsolatedAsyncioTestCase):
             visible,
             ["search_enterprise_faq", "get_request_identity"],
         )
+
+        rag_skill = registry.resolve(
+            ["knowledge_rag"],
+            available_tool_names=[tool.name for tool in tools],
+        )
+        rag_enabled_tools = frozenset(
+            tool_name
+            for skill in rag_skill
+            for tool_name in skill.required_tools
+        )
+        rag_context = SimpleNamespace(
+            context=AgentContext(enabled_tools=rag_enabled_tools)
+        )
+        rag_visible = []
+        for tool in tools:
+            is_enabled = tool.is_enabled(rag_context, None)
+            if asyncio.iscoroutine(is_enabled):
+                is_enabled = await is_enabled
+            if is_enabled:
+                rag_visible.append(tool.name)
+
+        self.assertEqual(rag_visible, ["search_knowledge_base"])
 
     def test_relative_session_path_is_resolved_from_workspace(self):
         path = resolve_session_db_path("chat_history/test.db")

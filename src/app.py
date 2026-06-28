@@ -8,7 +8,7 @@ from src.memory import MemoryScope, MemoryValidationError
 
 # 标题
 st.title("政企问答智能体")
-st.caption("OpenAI Agents SDK 原型 · RAG 功能已暂停")
+st.caption("OpenAI Agents SDK 原型 · ChromaDB RAG 知识库")
 st.divider()
 
 if "conversation_id" not in st.session_state:
@@ -72,7 +72,7 @@ selected_skills = st.sidebar.multiselect(
     default=default_skills,
     help="技能会同时控制提示词能力和当前请求可使用的工具。",
 )
-st.sidebar.caption("当前原型不加载 LangChain、ChromaDB 或任何 RAG 组件。")
+st.sidebar.caption("RAG 使用 ChromaDB；当前版本不加载 LangChain。")
 
 if st.sidebar.button("清空当前会话记忆", use_container_width=True):
     asyncio.run(agent.clear_memory())

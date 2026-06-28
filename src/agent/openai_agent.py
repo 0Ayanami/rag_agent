@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
 from uuid import uuid4
 
 from agents import (
@@ -18,26 +17,15 @@ from src.memory import MemoryScope, MemoryStore
 from src.model.agent_model import create_agent_model
 from src.skills import SkillDefinition, SkillRegistry
 from src.utils.config_handler import agent_conf
+from src.utils.path_tool import resolve_project_path, resolve_session_db_path
 from src.utils.prompt_loader import load_system_prompt
-
-
-def resolve_project_path(configured_path: str) -> Path:
-    """将配置路径稳定解析到项目根目录。"""
-    path = Path(configured_path)
-    if path.is_absolute():
-        return path
-    return Path(__file__).resolve().parents[2] / path
-
-
-def resolve_session_db_path(configured_path: str) -> Path:
-    return resolve_project_path(configured_path)
 
 
 def dynamic_instructions(
     context: RunContextWrapper[AgentContext],
     _agent: Agent[AgentContext],
 ) -> str:
-    """组合基础系统提示词与当前启用技能。"""
+    """组合基础系统提示词与当前启用技能"""
     base_prompt = load_system_prompt()
 
     if context.context.skill_prompt:
@@ -46,7 +34,7 @@ def dynamic_instructions(
 
 
 class OpenAIAgent:
-    """基于 OpenAI Agents SDK 的政企问答智能体。"""
+    """基于 OpenAI Agents SDK 的政企问答智能体"""
 
     def __init__(self, memory_scope: MemoryScope | None = None):
         set_tracing_disabled(agent_conf.get("tracing_disabled", True))
