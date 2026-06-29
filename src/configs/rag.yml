@@ -1,0 +1,11 @@
+persist_dir: chroma_db
+collection_name: enterprise_knowledge
+
+source_paths:
+  - data/extracted_txt
+  - data/extracted_md
+
+chunk_size: 900
+chunk_overlap: 120
+top_k: 4
+embedding_batch_size: 32

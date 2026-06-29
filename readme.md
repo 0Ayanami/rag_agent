@@ -152,7 +152,6 @@ python -m unittest tests/test_openai_agent_sdk.py
 
 ## 暂不覆盖
 
-- LangChain 运行时依赖
 - PDF 原文解析入库
 - 外部文档系统同步
 - 知识库自动增量监听

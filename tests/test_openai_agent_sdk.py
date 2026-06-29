@@ -31,8 +31,20 @@ from src.model.agent_model import (
     ModelConfigurationError,
     create_agent_model,
 )
+from rag.chunk_doc.chunk_doc import (
+    AbbreviationAwareSentenceSplitter,
+    ChunkPipeline,
+    ChunkPipelineConfig,
+    CleanedDocument,
+    Document,
+    DefaultDocumentCleaner,
+    HeadingStructureParser,
+    RegexTokenCounter,
+    Section,
+    chunk_documents,
+)
 from src.rag.config import RagConfig
-from src.rag.embedding import EmbeddingConfig, OpenAICompatibleEmbeddingClient
+from src.model.embedding import EmbeddingConfig, OpenAICompatibleEmbeddingClient
 from src.rag.service import RagService
 from src.rag.vector_store import RagSearchResult
 from src.skills import SkillRegistry, SkillValidationError
@@ -230,7 +242,7 @@ class OpenAIAgentSdkTests(unittest.IsolatedAsyncioTestCase):
                 },
                 clear=False,
             ),
-            patch("src.rag.embedding.load_dotenv"),
+            patch("src.model.embedding.load_dotenv"),
         ):
             config = EmbeddingConfig.from_env()
 
@@ -265,7 +277,7 @@ class OpenAIAgentSdkTests(unittest.IsolatedAsyncioTestCase):
             )
 
         client.client = FakeOpenAIClient()
-        with patch("src.rag.embedding.httpx.post", side_effect=fake_post):
+        with patch("src.model.embedding.httpx.post", side_effect=fake_post):
             embeddings = client.embed_texts(["采购审批"])
 
         self.assertEqual(embeddings, [[0.1, 0.2, 0.3]])
@@ -328,6 +340,141 @@ class OpenAIAgentSdkTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(vector_store.upserts)
         self.assertIn("采购流程", embedding_client.inputs)
         self.assertEqual(payload["matches"][0]["source_name"], "policy.md")
+
+    def test_chunk_pipeline_preserves_structure_and_metadata(self):
+        document = Document(
+            id="paper001",
+            source="policy.md",
+            title="采购制度文档",
+            text=(
+                "# 采购制度\n"
+                "采购申请应先由申请人提交。\n\n"
+                "部门负责人审批后，进入采购办复核。涉密资料不得上传外部平台。\n"
+                "## 例外处理\n"
+                "紧急事项应补充说明原因。"
+            ),
+        )
+        pipeline = ChunkPipeline(
+            config=ChunkPipelineConfig(
+                chunk_size=18,
+                chunk_overlap=4,
+                min_chunk_tokens=0,
+            )
+        )
+
+        chunks = pipeline.run(document)
+
+        self.assertGreaterEqual(len(chunks), 2)
+        token_counts = [chunk.metadata["token_count"] for chunk in chunks]
+        self.assertLessEqual(max(token_counts), 18)
+        self.assertEqual(chunks[0].metadata["source_name"], "policy.md")
+        self.assertIn("采购制度", chunks[0].metadata["hierarchy"])
+        self.assertIn("document_id", chunks[0].metadata)
+        self.assertIn("采购申请", chunks[0].text)
+        self.assertIn("total_chunks", chunks[0].metadata)
+        self.assertIn("character_count", chunks[0].metadata)
+
+    def test_structure_parser_detects_markdown_numeric_and_roman_headings(self):
+        parser = HeadingStructureParser()
+        document = CleanedDocument(
+            id="doc001",
+            source="paper.txt",
+            text=(
+                "# Abstract\n"
+                "1 Introduction\n"
+                "1.1 Background\n"
+                "II. Method\n"
+                "2.3.4 Experiment"
+            ),
+        )
+
+        parsed = parser.parse(document)
+        headings = [(heading.title, heading.level, heading.kind) for heading in parsed.headings]
+
+        self.assertEqual(
+            headings,
+            [
+                ("Abstract", 1, "markdown"),
+                ("Introduction", 1, "numeric"),
+                ("Background", 2, "numeric"),
+                ("Method", 1, "roman"),
+                ("Experiment", 3, "numeric"),
+            ],
+        )
+
+    def test_sentence_splitter_keeps_common_abbreviations_intact(self):
+        splitter = AbbreviationAwareSentenceSplitter()
+        section = Section(
+            text=(
+                "Dr. Smith measured the sample, e.g. with Fig. 2 and Eq. 3. "
+                "The result was stable."
+            ),
+            title="Method",
+            level=1,
+            start_line=1,
+            end_line=1,
+            hierarchy=("Method",),
+        )
+
+        sentences = splitter.split(section)
+
+        self.assertEqual(len(sentences), 2)
+        self.assertIn("Dr. Smith", sentences[0].text)
+        self.assertIn("e.g.", sentences[0].text)
+        self.assertIn("Fig. 2", sentences[0].text)
+        self.assertIn("Eq. 3", sentences[0].text)
+
+    def test_chunk_documents_keeps_existing_public_interface(self):
+        documents = [
+            Document(
+                id="notice001",
+                source="notice.txt",
+                text="第一句说明账号申请。第二句说明审批流程。第三句说明归档。",
+            )
+        ]
+
+        chunks = chunk_documents(
+            documents,
+            chunk_size=12,
+            chunk_overlap=3,
+        )
+
+        self.assertGreaterEqual(len(chunks), 1)
+        self.assertEqual(chunks[0].metadata["source_name"], "notice.txt")
+        self.assertIn("chunk_index", chunks[0].metadata)
+
+    def test_chunk_pipeline_allows_replacing_cleaner(self):
+        class PrefixCleaner:
+            def clean(self, document):
+                return CleanedDocument(
+                    id=document.id,
+                    source=document.source,
+                    text="自定义清洗：" + document.text,
+                )
+
+        pipeline = ChunkPipeline(
+            cleaner=PrefixCleaner(),
+            tokenizer=RegexTokenCounter(),
+            config=ChunkPipelineConfig(
+                chunk_size=50,
+                chunk_overlap=0,
+                min_chunk_tokens=0,
+            ),
+        )
+
+        [chunk] = pipeline.run(Document("custom001", "custom.md", "原始文本。"))
+
+        self.assertIn("自定义清洗", chunk.text)
+
+    def test_default_cleaner_normalizes_control_characters(self):
+        cleaner = DefaultDocumentCleaner()
+
+        cleaned = cleaner.clean(
+            Document("dirty001", "dirty.txt", "第一行\r\n第二行\x00\n\n\n第三行")
+        )
+
+        self.assertNotIn("\x00", cleaned.text)
+        self.assertIn("第一行\n第二行\n\n第三行", cleaned.text)
 
     def test_tools_are_agents_sdk_function_tools(self):
         self.assertEqual(
